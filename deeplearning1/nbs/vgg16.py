@@ -1,6 +1,7 @@
-from __future__ import division, print_function
+import json
+import os
+import time
 
-import os, json
 from glob import glob
 import numpy as np
 from scipy import misc, ndimage
@@ -16,7 +17,8 @@ from keras.layers.pooling import GlobalAveragePooling2D
 from keras.optimizers import SGD, RMSprop, Adam
 from keras.preprocessing import image
 
-# In case we are going to use the TensorFlow backend we need to explicitly set the Theano image ordering
+# In case we are going to use the TensorFlow backend we need to explicitly set
+# the Theano image ordering
 from keras import backend as K
 K.set_image_dim_ordering('th')
 
@@ -27,7 +29,7 @@ def vgg_preprocess(x):
         Subtracts the mean RGB value, and transposes RGB to BGR.
         The mean RGB was computed on the image set used to train the VGG model.
 
-        Args: 
+        Args:
             x: Image array (height x width x channels)
         Returns:
             Image array (height x width x transposed_channels)
@@ -37,15 +39,20 @@ def vgg_preprocess(x):
 
 
 class Vgg16():
-    """
-        The VGG 16 Imagenet model
-    """
+    """ The VGG 16 Imagenet model """
 
+    FILE_PATH = 'http://files.fast.ai/models/'
 
     def __init__(self):
-        self.FILE_PATH = 'http://files.fast.ai/models/'
+
+        start = time.time()
+        print('Loading VGG16 model')
+
+        self.classes = None
         self.create()
         self.get_classes()
+
+        print(f'Created model in {time.time() - start:0.2f}s')
 
 
     def get_classes(self):
@@ -66,7 +73,7 @@ class Vgg16():
             Args:
                 imgs (ndarray)    : An array of N images (size: N x width x height x channels).
                 details : ??
-            
+
             Returns:
                 preds (np.array) : Highest confidence value of the predictions for each image.
                 idxs (np.ndarray): Class index of the predictions with the max confidence.
@@ -91,7 +98,7 @@ class Vgg16():
             Args:
                 layers (int):   The number of zero padded convolution layers
                                 to be added to the model.
-                filters (int):  The number of convolution filters to be 
+                filters (int):  The number of convolution filters to be
                                 created for each layer.
         """
         model = self.model
@@ -168,31 +175,37 @@ class Vgg16():
 
     def finetune(self, batches):
         """
-            Modifies the original VGG16 network architecture and updates self.classes for new training data.
-            
-            Args:
-                batches : A keras.preprocessing.image.ImageDataGenerator object.
-                          See definition for get_batches().
+        Modifies the original VGG16 network architecture and updates
+        self.classes for new training data.
+
+        Args:
+            batches : A keras.preprocessing.image.ImageDataGenerator object.
+                        See definition for get_batches().
         """
         self.ft(batches.nb_class)
-        classes = list(iter(batches.class_indices)) # get a list of all the class labels
-        
-        # batches.class_indices is a dict with the class name as key and an index as value
-        # eg. {'cats': 0, 'dogs': 1}
+        # get a list of all the class labels
+        classes = list(iter(batches.class_indices))
 
-        # sort the class labels by index according to batches.class_indices and update model.classes
+
+        # batches.class_indices is a dict with the class name as key and an
+        # index as value eg. {'cats': 0, 'dogs': 1}
+
+        # sort the class labels by index according to batches.class_indices and
+        # update model.classes
         for c in batches.class_indices:
             classes[batches.class_indices[c]] = c
         self.classes = classes
 
-
     def compile(self, lr=0.001):
         """
-            Configures the model for training.
-            See Keras documentation: https://keras.io/models/model/
+        Configures the model for training.
+        See Keras documentation: https://keras.io/models/model/
         """
-        self.model.compile(optimizer=Adam(lr=lr),
-                loss='categorical_crossentropy', metrics=['accuracy'])
+        self.model.compile(
+            optimizer=Adam(lr=lr),
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
 
 
     def fit_data(self, trn, labels,  val, val_labels,  nb_epoch=1, batch_size=64):
@@ -218,13 +231,13 @@ class Vgg16():
             Predicts the classes using the trained model on data yielded batch-by-batch.
 
             Args:
-                path (string):  Path to the target directory. It should contain one subdirectory 
+                path (string):  Path to the target directory. It should contain one subdirectory
                                 per class.
                 batch_size (int): The number of images to be considered in each batch.
-            
+
             Returns:
                 test_batches, numpy array(s) of predictions for the test_batches.
-    
+
         """
         test_batches = self.get_batches(path, shuffle=False, batch_size=batch_size, class_mode=None)
         return test_batches, self.model.predict_generator(test_batches, test_batches.nb_sample)
